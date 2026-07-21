@@ -3,14 +3,28 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ApiError,
+  createJob,
   deleteFile,
+  deleteJob,
+  getDatasetStats,
   getFiles,
   getFileStats,
   getHealth,
+  getJob,
+  getJobPairs,
+  getJobs,
+  getLibraryPairs,
   getPreviewUrl,
+  getSourcePrefixes,
   getUploadActivity,
+  renameJob,
+  runJob,
 } from "@/lib/api-client";
-import type { FileMetadata } from "@vibe-coding-starter-kit/shared";
+import type {
+  CreateDepthJobInput,
+  DepthJob,
+  FileMetadata,
+} from "@depth-anything-v2-dataset/shared";
 
 // Single source of truth for query keys. Keep these tightly scoped so that
 // invalidating "files" doesn't blow away unrelated caches, and so an IDE
@@ -24,6 +38,12 @@ export const qk = {
     [...qk.all, "stats", "activity", days] as const,
   preview: (key: string) => [...qk.all, "preview", key] as const,
   health: () => [...qk.all, "health"] as const,
+  jobs: () => [...qk.all, "jobs"] as const,
+  job: (id: string) => [...qk.all, "jobs", id] as const,
+  jobPairs: (id: string) => [...qk.all, "jobs", id, "pairs"] as const,
+  libraryPairs: (limit: number) => [...qk.all, "library", "pairs", limit] as const,
+  datasetStats: () => [...qk.all, "dataset-stats"] as const,
+  sourcePrefixes: () => [...qk.all, "source-prefixes"] as const,
 };
 
 export type Health = Awaited<ReturnType<typeof getHealth>>;
@@ -84,5 +104,89 @@ export function useDeleteFile() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: qk.all });
     },
+  });
+}
+
+// --- Depth Jobs -------------------------------------------------------------
+
+export function useJobs() {
+  return useQuery<DepthJob[], ApiError>({
+    queryKey: qk.jobs(),
+    queryFn: getJobs,
+  });
+}
+
+export function useJob(id: string | undefined) {
+  return useQuery<DepthJob, ApiError>({
+    queryKey: qk.job(id ?? ""),
+    queryFn: () => getJob(id as string),
+    enabled: !!id,
+  });
+}
+
+export function useJobPairs(id: string | undefined) {
+  return useQuery({
+    queryKey: qk.jobPairs(id ?? ""),
+    queryFn: () => getJobPairs(id as string),
+    enabled: !!id,
+  });
+}
+
+export function useLibraryPairs(limit = 200) {
+  return useQuery({
+    queryKey: qk.libraryPairs(limit),
+    queryFn: () => getLibraryPairs(limit),
+  });
+}
+
+export function useDatasetStats() {
+  return useQuery({
+    queryKey: qk.datasetStats(),
+    queryFn: getDatasetStats,
+  });
+}
+
+export function useSourcePrefixes() {
+  return useQuery({
+    queryKey: qk.sourcePrefixes(),
+    queryFn: getSourcePrefixes,
+  });
+}
+
+export function useCreateJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateDepthJobInput) => createJob(input),
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.jobs() }),
+  });
+}
+
+export function useRenameJob(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => renameJob(id, name),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.jobs() });
+      qc.invalidateQueries({ queryKey: qk.job(id) });
+    },
+  });
+}
+
+export function useDeleteJob() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => deleteJob(id),
+    // A completed job's artifacts feed the dashboard + Library, so invalidate
+    // everything under the app root key.
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.all }),
+  });
+}
+
+export function useRunJob(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => runJob(id),
+    // A run writes depth artifacts + updates stats — refresh broadly.
+    onSuccess: () => qc.invalidateQueries({ queryKey: qk.all }),
   });
 }

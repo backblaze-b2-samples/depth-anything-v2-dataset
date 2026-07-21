@@ -1,17 +1,18 @@
-<!-- last_verified: 2026-06-25 -->
-# Feature: File Upload
+<!-- last_verified: 2026-07-21 -->
+# Feature: Image Ingest (Upload)
 
 ## Purpose
-Upload files from the browser to Backblaze B2 with real-time progress tracking.
+Ingest source RGB images from the browser to Backblaze B2 with real-time progress,
+ready to run a Depth Job over.
 
 ## Used By
 - UI: `/upload` page, upload form component
 - API: `POST /upload`
 
 ## Core Functions
-- `apps/web/src/components/upload/upload-form.tsx` — orchestrates dropzone + progress + upload state
+- `apps/web/src/components/upload/upload-form.tsx` — orchestrates dropzone + progress + state
 - `apps/web/src/components/upload/dropzone.tsx` — drag-and-drop via `react-dropzone`
-- `apps/web/src/components/upload/upload-progress.tsx` — per-file progress, errors, and retry controls
+- `apps/web/src/lib/upload-file-types.ts` — client allow-list (images only)
 - `apps/web/src/lib/api-client.ts` — `uploadFile()` using XHR for progress events
 - `services/api/app/runtime/upload.py` — HTTP handler, reads file chunks
 - `services/api/app/service/upload.py` — validates and orchestrates upload
@@ -19,57 +20,49 @@ Upload files from the browser to Backblaze B2 with real-time progress tracking.
 - `services/api/app/service/metadata.py` — `extract_metadata()` after upload
 
 ## Canonical Files
-- Upload handler pattern: `services/api/app/runtime/upload.py`
 - Service orchestration pattern: `services/api/app/service/upload.py`
 - Frontend upload flow: `apps/web/src/components/upload/upload-form.tsx`
 
 ## Inputs
-- file: `File` (from browser, multipart form data)
-- content_type: string (from file MIME type)
+- file: `File` (browser multipart form data)
+- content_type: string (image/jpeg, image/png, image/webp)
 
 ## Outputs
 - `FileUploadResponse`: key, filename, size, content_type, uploaded_at, url, metadata
-- Side effects: file stored in B2 bucket under `uploads/{sanitized_filename}`
+- Side effect: image stored in B2 under `uploads/{sanitized_filename}`
 
 ## Flow
-- User drops or selects files in dropzone
-- Client validates file size (max 100MB) and type — rejected files remain in the queue with a clear reason and show toast feedback
+- User drops or selects images in the dropzone
+- Client validates size (max 100MB) and type — this app accepts JPEG / PNG / WebP only
 - XHR sends multipart POST to `/upload` with progress events
-- API checks `Content-Length` header early to reject oversized requests before reading body
-- API validates content type against allowlist (SVG excluded — stored-XSS risk)
-- API sanitizes filename (strips path components, null bytes, unsafe chars, limits to 200 chars)
-- API validates file extension matches declared MIME type
-- API reads file in 1MB chunks with streaming size enforcement (max 100MB)
-- API rejects empty files
-- API verifies the leading bytes match the declared type for binary formats (magic-byte signature check)
-- API uses key: `uploads/{sanitized_filename}`
-- API calls `put_object` to B2
-- API extracts file metadata (checksums, image dimensions, PDF info)
-- API returns `FileUploadResponse`
-- Client shows toast, updates progress state, and refreshes shared data after successful uploads
+- API checks `Content-Length` early, validates type against the image allow-list
+  (SVG excluded — stored-XSS risk), sanitizes the filename, checks extension↔type,
+  reads in 1MB chunks with streaming size enforcement, rejects empty files, and
+  verifies the leading bytes match the declared image type (magic-byte check)
+- API stores under `uploads/{sanitized_filename}` via `put_object`, extracts
+  metadata (checksums + image dimensions), and returns `FileUploadResponse`
 
 ## Edge Cases
-- File exceeds 100MB → client-side rejected row + toast; API returns 413 if bypassed
-- File type not in allowlist → API returns 415
-- File extension mismatches MIME type → API returns 415
-- File contents don't match the declared type (e.g. script bytes sent as `image/png`) → API returns 415
-- No filename provided → API returns 400
-- Empty file → API returns 400
-- Duplicate filename → B2 creates a new version (buckets are always versioned)
-- B2 unreachable → API returns 500; UI keeps failed rows retryable when the file can be resubmitted
-- Upload aborted by user → XHR abort, error state in UI
+- File exceeds 100MB → client-rejected row + toast; API returns 413 if bypassed
+- Non-image type → API returns 415
+- Extension mismatches MIME type → API returns 415
+- Bytes don't match declared image type → API returns 415
+- No filename → 400; empty file → 400
+- Duplicate filename → B2 creates a new version (buckets are versioned)
+- B2 unreachable → API returns 500; UI keeps failed rows retryable
 
 ## UX States
 - Empty: dropzone with instructions
-- Loading: per-file progress bars with spinner icon
-- Error: red status icon, error message per file, retry action when applicable
-- Complete: green checkmark, "Clear finished" button
-- Rejected: persistent row with non-retryable reason
-- Disabled: dropzone explains that new files can be added when the current queue finishes
+- Loading: per-file progress bars
+- Error: red status icon + per-file reason, retry when applicable
+- Complete: green checkmark, "Clear finished"
 
 ## Verification
-- Test files: `services/api/tests/test_upload_validation.py`, `services/api/tests/test_upload_conflict.py`, `services/api/tests/test_error_handling.py`
-- Required cases: successful upload, oversized file rejection (413), disallowed type (415), extension mismatch (415), content-signature mismatch (415), missing filename, empty file, duplicate filename allowed, `uploads_total` metric increments
+- Test files: `services/api/tests/test_upload_validation.py`,
+  `services/api/tests/test_upload_conflict.py`, `services/api/tests/test_error_handling.py`
+- Required cases: successful image upload, oversized (413), disallowed type (415),
+  extension mismatch (415), content-signature mismatch (415), empty file (400),
+  duplicate filename allowed, `uploads_total` metric increments
 - Quick verify command: `pnpm test:api`
 - Full verify command: `pnpm lint && pnpm lint:api && pnpm test:api && pnpm check:structure`
 - Pass criteria: all pytest tests green, no ruff violations
@@ -77,4 +70,5 @@ Upload files from the browser to Backblaze B2 with real-time progress tracking.
 ## Related Docs
 - [ARCHITECTURE.md](../../ARCHITECTURE.md)
 - [Metadata Extraction](metadata-extraction.md)
+- [Depth Jobs](depth-jobs.md)
 - [App Workflows](../app-workflows.md)

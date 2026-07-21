@@ -6,28 +6,29 @@ product
 
 ## Users
 
-AI coding agents and "vibe coders" (developers who lean on AI to move fast) who clone
-this kit as the foundation for a new full-stack app. Their context: they want to skip
-the boilerplate loop (dashboard, upload, file browser, cloud storage wiring) and go
-straight to building their app's unique features. They read the repo, keep the shared
-scaffolding, and rebrand + rewrite the dashboard for their own use case.
+Robotics, AR, and 3D dataset teams — perception/ML engineers who need dense depth maps
+for large RGB image collections and want the source images and derived depth maps kept
+together as a training-ready dataset. Their context: they have (or are collecting) scenes
+of images, they want depth without standing up GPU infrastructure or paying per-call API
+fees, and they need the result addressable from a training pipeline. They care about
+where the data lives, how it's indexed, and how much it costs to store as it grows.
 
 ## Product Purpose
 
-A production-ready full-stack starter kit (Next.js 16 + React 19 + Tailwind v4 +
-shadcn/ui frontend, FastAPI backend) with Backblaze B2 cloud storage integrated out of
-the box. It ships a dashboard, drag-and-drop upload, and a file browser so builders
-start from a working app, not a blank page. Success = a builder can clone it, run it,
-rebrand it via one config file, and trust every screen enough to build on top without
-first fixing it.
+A focused full-stack app (Next.js 16 + React 19 + Tailwind v4 + shadcn/ui frontend,
+FastAPI backend) that runs **Depth Anything V2 locally** over images stored in Backblaze
+B2 and writes co-located depth artifacts + a per-job `manifest.jsonl` index back to the
+same bucket. It ships a Depth Jobs surface, a scoped Pairs Library, and a dashboard that
+foregrounds the **write-amplification** story (source vs depth bytes). Success = a team
+can ingest a scene, run a job, and read matched image→depth pairs straight from B2 — with
+zero external API keys and cheap, S3-addressable storage as the dataset doubles in size.
 
 ## Brand Personality
 
-Confident, precise, quietly professional. Voice is direct and free of hype ("Stop
-wiring boilerplate and start building"). The interface should feel like a modern
-developer tool — considered, calm, trustworthy — not a marketing showpiece. It is a
-**neutral foundation** that others rebrand: the design carries craft through restraint,
-not through a strong opinionated identity of its own.
+Confident, precise, quietly professional. Voice is direct and free of hype. The interface
+should feel like a modern perception/ML tool — considered, calm, trustworthy — that gets
+out of the way of the data. Craft shows through restraint and correctness, not through a
+loud identity.
 
 ## Anti-references
 
@@ -43,11 +44,10 @@ not through a strong opinionated identity of its own.
 
 ## Design Principles
 
-- **Practice what you preach.** The kit itself must model the production quality it
-  asks agents to produce. Slop here propagates into every project built on it.
-- **Neutral foundation, easy to rebrand.** Identity lives in tokens (`globals.css`) and
-  one config file. Screens are built from the shared UI kit so a rebrand is a token
-  swap, not a rewrite.
+- **The data is the product.** Every screen serves understanding the dataset — jobs,
+  pairs, and the source-vs-depth storage split. Chrome never competes with the artifacts.
+- **Tokens over hard-coded style.** Identity lives in tokens (`globals.css`); screens are
+  built from the shared UI kit so restyling is a token swap, not a rewrite.
 - **Earned familiarity over novelty.** Use standard, trusted affordances (top bar +
   side nav, command palette, data tables). The tool disappears into the task.
 - **Every state is designed.** Default, hover, focus, active, disabled, loading (skeleton),

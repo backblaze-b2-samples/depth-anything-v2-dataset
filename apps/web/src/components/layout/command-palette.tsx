@@ -9,6 +9,8 @@ import {
   Settings,
   Sparkles,
   FileIcon,
+  Layers,
+  Images,
   Moon,
   Sun,
 } from "lucide-react";
@@ -25,7 +27,7 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { getFiles } from "@/lib/api-client";
-import type { FileMetadata } from "@vibe-coding-starter-kit/shared";
+import type { FileMetadata } from "@depth-anything-v2-dataset/shared";
 
 interface CommandPaletteProps {
   open: boolean;
@@ -35,6 +37,8 @@ interface CommandPaletteProps {
 const routes = [
   { label: "Dashboard", href: "/", icon: LayoutDashboard },
   { label: "Upload", href: "/upload", icon: Upload },
+  { label: "Depth Jobs", href: "/jobs", icon: Layers },
+  { label: "Pairs Library", href: "/library", icon: Images },
   { label: "Files", href: "/files", icon: FolderOpen },
   { label: "Settings", href: "/settings", icon: Settings },
   { label: "Design System", href: "/design", icon: Sparkles },

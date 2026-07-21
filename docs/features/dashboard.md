@@ -1,57 +1,61 @@
-<!-- last_verified: 2026-06-25 -->
+<!-- last_verified: 2026-07-21 -->
 # Feature: Dashboard
 
 ## Purpose
-Provide an at-a-glance overview of file storage usage and recent upload activity.
+Give an at-a-glance view of the depth dataset: jobs, images processed, depth maps
+stored, and the source-vs-depth storage split (the write-amplification story).
 
 ## Used By
 - UI: `/` page (dashboard home)
-- API: `GET /files/stats`, `GET /files`, `GET /files/stats/activity`
+- API: `GET /jobs/stats`, `GET /jobs`
 
 ## Core Functions
 - `apps/web/src/components/dashboard/stats-cards.tsx` — 4 stat cards
-- `apps/web/src/components/dashboard/recent-uploads-table.tsx` — last 10 uploads
-- `apps/web/src/components/dashboard/upload-chart.tsx` — bar chart of uploads per day
-- `apps/web/src/lib/api-client.ts` — `getFileStats()`, `getFiles()`, `getUploadActivity()`
-- `services/api/app/runtime/files.py` — `GET /files/stats` handler
-- `services/api/app/service/files.py` — `get_stats()` business logic
-- `services/api/app/repo/b2_client.py` — `get_upload_stats()` data access
+- `apps/web/src/components/dashboard/storage-chart.tsx` — stacked source-vs-depth bytes per job
+- `apps/web/src/components/dashboard/recent-jobs-table.tsx` — last 5 jobs
+- `apps/web/src/lib/queries.ts` — `useDatasetStats()`, `useJobs()`
+- `services/api/app/runtime/jobs.py` — `GET /jobs/stats` handler
+- `services/api/app/service/jobs.py` — `get_dataset_stats()` business logic
+- `services/api/app/repo/jobs.py` — job-record aggregation over B2
 
 ## Canonical Files
-- Dashboard page layout: `apps/web/src/components/dashboard/stats-cards.tsx`
-- Stats service logic: `services/api/app/service/files.py`
+- Dashboard aggregation: `services/api/app/service/jobs.py` (`get_dataset_stats`)
+- Chart pattern: `apps/web/src/components/dashboard/storage-chart.tsx`
 
 ## Inputs
-- None (dashboard loads data automatically)
+- None (dashboard loads data automatically via TanStack Query)
 
 ## Outputs
-- `GET /files/stats` → `UploadStats` (total_files, total_size_bytes, total_size_human, uploads_today, total_downloads)
-- `GET /files` (limit 10) → `FileMetadata[]` for recent uploads table (sorted newest-first)
-- `GET /files/stats/activity?days=7` → `DailyUploadCount[]` for chart (server-side aggregation)
+- `GET /jobs/stats` → `DepthDatasetStats` (total_jobs, images_processed,
+  depth_maps_stored, source_bytes, depth_bytes, total_bytes, humanized variants,
+  amplification_ratio)
+- `GET /jobs` → `DepthJob[]` for the chart and recent-jobs table
 
 ## Flow
-- Page loads → three parallel API calls (stats, recent files, upload activity)
-- Stats cards display total files, storage used, uploads today, total downloads
-- Upload chart displays server-aggregated daily counts for last 7 days as bar chart after activity data is known
-- Recent uploads table shows last 10 files with filename, size, type, date, status badge
+- Page loads → `useDatasetStats()` + `useJobs()` fire in parallel
+- Stat cards show job/image/depth-map counts and total storage with the source vs
+  depth split + amplification ratio
+- Storage chart renders one stacked bar per job (source bytes + depth bytes)
+- Recent-jobs table shows the 5 newest jobs with status and image counts
 
 ## Edge Cases
-- API unavailable → error states with retry where supported; activity chart does not show a false zero state while loading
-- No files uploaded → empty chart message, empty table message
-- Large file count → stats endpoint paginates through all objects using `ContinuationToken`
+- API unavailable → inline error state with retry
+- No jobs / no completed runs → empty chart + empty table messages
+- Amplification ratio is 0 when no source bytes have been recorded yet
 
 ## UX States
-- Loading: skeleton placeholders for cards, table, and upload activity chart
-- Empty: "No files uploaded yet" / "No upload data available yet"
+- Loading: skeleton placeholders for cards, chart, and table
+- Empty: "No depth data yet" / "No jobs yet"
 - Loaded: populated cards, chart, table
 
 ## Verification
-- Test files: `services/api/tests/test_upload_activity.py`, `services/api/tests/test_recent_files.py`
-- Required cases: stats with files, stats with empty bucket, API error fallback
+- Test files: `services/api/tests/test_jobs.py` (`test_dataset_stats_amplification`)
+- Required cases: stats with jobs (amplification), empty state
 - Quick verify command: `pnpm test:api`
 - Full verify command: `pnpm lint && pnpm lint:api && pnpm test:api && pnpm check:structure`
 - Pass criteria: all pytest tests green, no ruff violations
 
 ## Related Docs
 - [ARCHITECTURE.md](../../ARCHITECTURE.md)
+- [Depth Jobs](depth-jobs.md)
 - [App Workflows](../app-workflows.md)

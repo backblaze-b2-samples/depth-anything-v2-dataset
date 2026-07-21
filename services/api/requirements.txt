@@ -6,7 +6,13 @@ pydantic>=2.10.0
 pydantic-settings>=2.7.0
 boto3>=1.35.0
 Pillow>=11.0.0
-PyPDF2>=3.0.0
+
+# Depth Anything V2 — local inference (CPU wheel; MPS/CUDA autodetected at
+# runtime). Pinned windows: unbounded torch/transformers is a false-green on a
+# fresh clone (boots + hermetic tests pass, real inference errors).
+torch>=2.3,<2.9
+transformers>=4.45,<5
+numpy>=1.26,<2
 
 # Dev / quality
 ruff>=0.8.0

@@ -5,20 +5,7 @@ import { ACCEPTED_FILE_TYPES } from "./upload-file-types";
 // Mirror of the backend `ALLOWED_TYPES` set in
 // services/api/app/service/upload.py. The dropzone allow-list must stay in
 // lockstep with what the server accepts; this fails loudly if either drifts.
-const BACKEND_ALLOWED_TYPES = [
-  "image/jpeg",
-  "image/png",
-  "image/gif",
-  "image/webp",
-  "application/pdf",
-  "text/plain",
-  "text/csv",
-  "application/json",
-  "application/zip",
-  "video/mp4",
-  "audio/mpeg",
-  "audio/wav",
-];
+const BACKEND_ALLOWED_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 describe("ACCEPTED_FILE_TYPES", () => {
   it("covers exactly the backend allow-list", () => {

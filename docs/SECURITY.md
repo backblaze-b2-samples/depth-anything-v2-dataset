@@ -1,21 +1,21 @@
 <!-- last_verified: 2026-04-22 -->
 # Security
 
-Security principles and implementation for the vibe-coding-starter-kit.
+Security principles and implementation for the depth-anything-v2-dataset.
 
 ## Trust Boundaries
 
-- **Frontend -> API**: CORS-restricted to configured origins, scoped to `GET/POST/DELETE/OPTIONS`. `allow_credentials` is `False` (no cookie/session auth today); enable it only alongside real auth and a tightened origin allowlist.
-- **API -> B2**: Authenticated via `B2_KEY_ID` + `B2_APPLICATION_KEY`, signature v4
-- **Client -> B2**: Presigned URLs for download (10-min expiry, `Content-Disposition: attachment`)
+- **Frontend -> API**: CORS-restricted to configured origins, scoped to `GET/POST/PATCH/DELETE/OPTIONS`. `allow_credentials` is `False` (no cookie/session auth today); enable it only alongside real auth and a tightened origin allowlist.
+- **API -> B2**: Authenticated via `B2_APPLICATION_KEY_ID` + `B2_APPLICATION_KEY`, signature v4
+- **Client -> B2**: Presigned URLs — downloads force `Content-Disposition: attachment`; pairs/library media are presigned for inline rendering
 
 ## Upload Validation
 
 - Filename sanitization: path traversal, null bytes, unsafe chars stripped
 - MIME/extension consistency check against allowlist
 - Chunked streaming with size enforcement (100MB default)
-- Content-type allowlist (images, PDFs, text, archives, audio/video). **SVG is excluded** — it can embed `<script>` that executes when served from a public bucket URL (stored XSS). Re-add only with server-side sanitization.
-- **Magic-byte signature check**: for binary types, the leading bytes must match the declared content type, so a script payload can't masquerade as `image/png`. Text-like types (plain/CSV/JSON) have no signature and skip this check.
+- Content-type allowlist — **images only** (`image/jpeg`, `image/png`, `image/webp`), since this app ingests source RGB images. **SVG is excluded** — it can embed `<script>` that executes when served from a public bucket URL (stored XSS). Re-add only with server-side sanitization.
+- **Magic-byte signature check**: the leading bytes must match the declared image type, so a script payload can't masquerade as `image/png`.
 - Empty file rejection
 
 ## Rate Limiting

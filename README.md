@@ -1,96 +1,56 @@
-<!-- last_verified: 2026-07-15 -->
-# Vibe Coding Starter Kit
+<!-- last_verified: 2026-07-21 -->
+# Depth Anything V2 Dataset
 
-Stop wiring boilerplate and start building. This open-source starter kit gives vibe coders and AI coding agents a production-ready foundation — a full-stack TypeScript + Python template with a pre-built dashboard UI, file upload system, and **[Backblaze B2](https://www.backblaze.com/sign-up/ai-cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-oss-start)** cloud storage already integrated. Save thousands of tokens on setup prompts, skip the "build me a dashboard from scratch" loop, and go straight to building your app's unique features.
+Generate dense depth maps from large RGB image collections and keep the source
+images and their derived depth maps together as a training-ready dataset on
+**[Backblaze B2](https://www.backblaze.com/sign-up/ai-cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-depth-anything-v2-dataset)**.
 
-**What you get out of the box:**
-- Full-stack dashboard UI (Next.js 16 + React 19 + Tailwind v4 + shadcn/ui)
-- File upload with drag-and-drop, progress tracking, and metadata extraction
-- File browser with preview, download, and delete
-- FastAPI backend with strict layered architecture and structural tests
-- Agent-optimized docs — your AI coding agent can read the repo and start contributing immediately
+Built for robotics / AR / 3D dataset teams: ingest RGB images into a B2 bucket
+(organized by scene/session prefix), create a **Depth Job** that runs
+[Depth Anything V2](https://github.com/DepthAnything/Depth-Anything-V2) locally
+over those images, and the app writes a co-located depth artifact (16-bit PNG
+and/or `.npy`) plus a browser-viewable colorized preview back to B2, indexed by
+a per-job `manifest.jsonl`. Downstream training reads matched image+depth pairs
+straight from B2 over the S3 API, using the manifest as the dataset index.
 
-## What it looks like
+**Why B2 is the story here — write amplification.** Every ingested image yields
+a co-located depth map, so the dataset roughly doubles in object count and grows
+substantially in bytes. B2 is the storage layer that absorbs that growth cheaply,
+accessed over the S3-compatible API with a custom user-agent and standard `B2_*`
+env vars. Everything heavy runs **locally** — no second API key, just B2
+credentials.
 
-**Dashboard** — stats, upload activity, and recent uploads at a glance:
+## The workflow
 
-![Dashboard view showing stat cards, upload activity chart, and recent uploads table](docs/images/b2-starterkit-dashboard1.png)
+1. **Ingest** source RGB images into a B2 scene prefix (`/upload`, or run
+   `scripts/seed-demo.py`).
+2. **Run** a Depth Job over that prefix — Depth Anything V2 estimates depth for
+   each image on-device.
+3. **Write** artifacts back to B2: `depth/<job_id>/<name>.depth.png` (16-bit),
+   optional `.depth.npy`, a colorized `<name>.depth_preview.png`, and a
+   `manifest.jsonl` index.
+4. **Serve / query** matched image→depth pairs from B2 — browse them in the
+   Pairs Library, or read the manifest from any training pipeline over S3.
 
-**File browser** — tree view with preview, download, and delete:
+## Key features
 
-![File browser view showing a tree of files with hover actions](docs/images/b2-starterkit-fileview2.png)
-
-## Agent-First Architecture
-
-This repo is optimized for coding agents. Use the template, point your agent at it, and start building.
-
-The structure follows the principle that **repository knowledge is the system of record**. Anything an agent can't access in-context doesn't exist — so everything it needs to reason about the codebase is versioned, co-located, and discoverable from the repo itself.
-
-### How it works
-
-**[AGENTS.md](AGENTS.md) is the single source of truth for all coding agents.** A ~100 line entry point gives agents the repository layout, architectural invariants, commands, conventions, and pointers to deeper docs. Agent-specific files (CLAUDE.md, etc.) are thin pointers back to AGENTS.md.
-
-**Architecture is enforced mechanically, not by convention.** Layering rules, import boundaries, file size limits, and SDK containment are verified by structural tests and lints that run on every change. When rules are enforceable by code, agents follow them reliably.
-
-**The knowledge base is structured for progressive disclosure:**
-
-```
-AGENTS.md              Single source of truth — layout, invariants, commands, conventions
-ARCHITECTURE.md        System layout, layering rules, data flows
-docs/
-  features/            Feature docs (inputs, outputs, flows, edge cases)
-  app-workflows.md     User journeys
-  dev-workflows.md     Engineering workflows and testing
-  SECURITY.md          Security principles
-  RELIABILITY.md       Reliability expectations
-  exec-plans/          Execution plans and tech debt tracker
-```
-
-### Key design decisions
-
-| Principle | Implementation |
-|-----------|---------------|
-| Give agents a single source of truth | AGENTS.md ~100 lines — layout, invariants, commands, conventions |
-| Enforce invariants mechanically | Structural tests + ruff + ESLint verify boundaries |
-| DRY documentation | Each fact lives in one place; no redundant files to drift |
-| Strict layered architecture | `types -> config -> repo -> service -> runtime`, enforced by tests |
-| Prefer boring, composable libraries | stdlib logging over frameworks, Pydantic over ad-hoc validation |
-| Contain external SDKs | `boto3` only in `repo/` layer — verified by structural test |
-| Keep files agent-sized | 300-line limit per file, enforced by test |
-| Docs updated with code | Same-PR requirement prevents documentation rot |
-| Structured observability | JSON logging, `/metrics` endpoint, request tracing |
-
-This approach draws from [OpenAI's experience building with Codex](https://openai.com/index/harness-engineering/): agents work best in environments with strict boundaries, predictable structure, and progressive context disclosure.
+- **Depth Jobs** — the primary entity, with the full lifecycle
+  (create · read · rename · delete · run) in the UI.
+- **Depth Anything V2, local** — HuggingFace `transformers`
+  `pipeline("depth-estimation")`, default checkpoint
+  `depth-anything/Depth-Anything-V2-Small-hf` (Apache-2.0, public — no token).
+  Device auto-detects CUDA → Apple MPS → CPU and always falls back to CPU.
+- **Manifest dataset index + amplification** — the dashboard surfaces
+  source-vs-depth bytes and the amplification ratio.
+- **Pairs Library** — a gallery of source→depth-preview pairs across all jobs,
+  scoped to the sample's own `depth/` prefix and rendered via presigned URLs.
+- **B2 ingest + full-bucket explorer** — drag-and-drop image ingest and the
+  kept `/files` bucket browser.
 
 ## Quick Start
 
-You need: Node.js >= 20, pnpm >= 9, Python >= 3.11, and a free **[Backblaze B2 account](https://www.backblaze.com/sign-up/ai-cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-oss-start)**.
-
-### Start a new project
-
-**Option 1: GitHub Template (recommended)**
-
-Click the green **"Use this template"** button at the top of this repo, name your project, then:
-
-```bash
-git clone https://github.com/yourorg/my-cool-app.git
-cd my-cool-app
-```
-
-**Option 2: Clone and reinitialize**
-
-```bash
-git clone https://github.com/backblaze-b2-samples/vibe-coding-starter-kit.git my-cool-app
-cd my-cool-app
-rm -rf .git
-git init
-git add .
-git commit -m "Initial commit from vibe-coding-starter-kit"
-```
-
-Either way you get a clean project with no upstream history — ready to push to your own repo and point your agent at it.
-
-### Setup
+You need: Node.js >= 20, pnpm >= 9, Python >= 3.11, and a free
+**[Backblaze B2 account](https://www.backblaze.com/sign-up/ai-cloud-storage?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-depth-anything-v2-dataset)**.
 
 **1. Install dependencies**
 
@@ -98,7 +58,8 @@ Either way you get a clean project with no upstream history — ready to push to
 pnpm install
 ```
 
-**2. Set up the backend**
+**2. Set up the backend** (installs torch + transformers — the CPU wheel is
+fine; MPS/CUDA are auto-detected at runtime)
 
 ```bash
 cd services/api
@@ -109,22 +70,22 @@ cd ../..
 
 **3. Add your B2 credentials**
 
-Set up your local `.env`:
-
 ```bash
 cp .env.example .env
 ```
 
-Open `.env` in your editor and keep it visible. Then head to the [Backblaze B2 dashboard](https://secure.backblaze.com/b2_buckets.htm?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-oss-start) and:
+Then head to the
+[Backblaze B2 dashboard](https://secure.backblaze.com/b2_buckets.htm?utm_source=github&utm_medium=referral&utm_campaign=ai_artifacts&utm_content=b2ai-depth-anything-v2-dataset) and:
 
-1. **Create a bucket.** B2 will show two values — paste each into `.env`:
-   - **Bucket Unique Name** → `B2_BUCKET_NAME`
-   - **Endpoint** → `B2_ENDPOINT`
-2. **Create an application key** with `Read and Write` permission. B2 will show two values — paste each into `.env`:
-   - **keyID** → `B2_KEY_ID`
-   - **applicationKey** → `B2_APPLICATION_KEY` *(only shown once — paste it now)*
+1. **Create a bucket** → paste its unique name into `B2_BUCKET_NAME`, and set
+   `B2_REGION` to the bucket's region (default `us-west-004`; the S3 endpoint is
+   derived from it).
+2. **Create an application key** with Read and Write permission → paste
+   **keyID** into `B2_APPLICATION_KEY_ID` and **applicationKey** into
+   `B2_APPLICATION_KEY` (shown once).
 
-> Want a walkthrough? See the docs for [creating a bucket](https://www.backblaze.com/docs/cloud-storage-create-and-manage-buckets) and [creating app keys](https://www.backblaze.com/docs/cloud-storage-create-and-manage-app-keys).
+`B2_PUBLIC_URL_BASE` is optional — the app serves media via presigned URLs
+regardless, so you can leave it unset.
 
 **4. Run it**
 
@@ -132,43 +93,39 @@ Open `.env` in your editor and keep it visible. Then head to the [Backblaze B2 d
 pnpm dev
 ```
 
-That's it. Frontend at `localhost:3000`, API at `localhost:8000`. Upload a file and see it working. Interactive API docs (Swagger UI) are at `localhost:8000/docs`, with ReDoc at `/redoc`.
+Frontend at `localhost:3000`, API at `localhost:8000` (Swagger UI at
+`/docs`). `pnpm dev` runs `pnpm doctor` first — a preflight that catches common
+setup gotchas.
 
-`pnpm dev` runs `pnpm doctor` first — a preflight check that catches the common setup gotchas (wrong Node/Python version, missing venv, missing or placeholder `.env`, ports already taken) and tells you exactly how to fix each one. Run it standalone any time with `pnpm doctor`.
+**5. Seed a demo scene (optional but recommended)**
 
-## Building Your App
+```bash
+services/api/.venv/bin/python scripts/seed-demo.py   # -> demo-scene/ (6 images)
+```
 
-When you adapt this kit for a new app, keep the shared scaffolding and only swap out what's app-specific:
+Then open **Depth Jobs → New job**, pick the `demo-scene/` prefix, and hit
+**Run**. First run downloads the model weights from the HuggingFace Hub
+(~100 MB for Small) — network is needed on the first run only. Use
+`--from-urls <url> …` to seed real photos instead of synthetic ones.
 
-- **Keep** the UI kit (`apps/web/src/components/ui/` + design tokens in `globals.css` + `/design`).
-- **Keep** the File Explorer (`/files`) and Upload (`/upload`) pages and their sidebar nav entries — they're the reusable B2-backed surface.
-- **Adapt** the Dashboard (`/`) to your use case — replace the default stats, chart, and recent uploads with metrics that reflect what your app actually does.
-- **Rebrand** by editing a single file: `apps/web/src/lib/app-config.ts` holds the app name and description (`APP_NAME`, `APP_DESCRIPTION`). Changing them there updates the page title, sidebar, and breadcrumb everywhere — no other files to touch.
+## Environment variables
 
-Full contract and rationale: [AGENTS.md §2 — Building on This Starter Kit](AGENTS.md#2-building-on-this-starter-kit).
-
-## Core Features
-
-- [File Upload](docs/features/file-upload.md) — drag-and-drop upload with real-time progress
-- [File Browser](docs/features/file-browser.md) — list, preview, download, delete files
-- [Dashboard](docs/features/dashboard.md) — stats cards, upload chart, recent uploads
-- [Metadata Extraction](docs/features/metadata-extraction.md) — image dimensions, EXIF, PDF info, checksums
-- [Design System](docs/design-system.md) — tokens, primitives, AI elements, the blaze generating loader, and inline `ErrorState` / `EmptyState` patterns. Live preview at `/design`.
-- Inline error handling — fetch failures surface *what's wrong* (API offline, 401, 5xx) and offer a Retry, instead of silently rendering empty state.
-- Single-source config — one `.env` at the repo root powers both API and web app, validated at startup so misconfig fails fast with a readable message.
-- Centralized data layer — every fetch goes through TanStack Query hooks in `apps/web/src/lib/queries.ts`; cache invalidation is one call after a mutation.
-- Structural tests — verify layering rules, import boundaries, SDK containment, file size limits
-- Structured JSON logging — every request traced with `request_id` and timing
-- `/health` endpoint — B2 connectivity check
-- `/metrics` endpoint — Prometheus-format counters (request count, latency, uploads)
-- `/docs` + `/redoc` — auto-generated interactive API docs (toggle off in prod with `ENABLE_DOCS=false`)
-- Per-IP rate limiting and magic-byte upload validation — see [SECURITY.md](docs/SECURITY.md)
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `B2_APPLICATION_KEY_ID` | yes | B2 application key ID |
+| `B2_APPLICATION_KEY` | yes | B2 application key |
+| `B2_BUCKET_NAME` | yes | Target bucket |
+| `B2_REGION` | no (default `us-west-004`) | Drives the S3 endpoint |
+| `B2_PUBLIC_URL_BASE` | no | Public object URL base (convenience only) |
+| `DEPTH_MODEL_ID` | no | HuggingFace checkpoint override |
+| `DEPTH_DEVICE` | no (default `auto`) | `auto\|cpu\|cuda\|mps` |
+| `DEPTH_MAX_IMAGES_PER_RUN` | no (default `8`) | Bounded demo run cap |
 
 ## Tech Stack
 
-- TypeScript, Next.js 16, React 19, Tailwind v4, shadcn/ui, Recharts
-- TanStack Query — caching, dedup, retry, stale-while-revalidate for every fetch
-- Python 3.11+, FastAPI, boto3, Pydantic v2, Pillow, PyPDF2
+- TypeScript, Next.js 16, React 19, Tailwind v4, shadcn/ui, Recharts, TanStack Query
+- Python 3.11+, FastAPI, boto3, Pydantic v2, Pillow, NumPy
+- Depth Anything V2 via HuggingFace `transformers` + `torch` (local inference)
 - Backblaze B2 (S3-compatible object storage)
 - pnpm workspaces (monorepo)
 
@@ -177,40 +134,25 @@ Full contract and rationale: [AGENTS.md §2 — Building on This Starter Kit](AG
 | Command | What it does |
 |---------|-------------|
 | `pnpm dev` | Start frontend + backend |
-| `pnpm dev:web` | Frontend only |
-| `pnpm dev:api` | Backend only |
+| `pnpm dev:web` / `pnpm dev:api` | One side only |
 | `pnpm build` | Build frontend |
-| `pnpm lint` | Lint frontend |
-| `pnpm lint:api` | Lint backend (ruff) |
-| `pnpm test:web` | Run frontend unit tests (vitest) |
-| `pnpm test:api` | Run backend tests |
+| `pnpm lint` / `pnpm lint:api` | Lint frontend / backend |
+| `pnpm test:web` / `pnpm test:api` | Unit tests |
 | `pnpm check:structure` | Verify layering rules |
-| `pnpm test:e2e` | Playwright e2e tests (run `pnpm --filter @vibe-coding-starter-kit/web exec playwright install chromium` once first) |
+| `pnpm test:e2e` | Playwright e2e tests |
 
 ## Documentation Map
 
 | Doc | Purpose |
 |-----|---------|
 | [AGENTS.md](AGENTS.md) | Agent table of contents — start here |
-| [ARCHITECTURE.md](ARCHITECTURE.md) | System layout, layering, data flows |
-| [docs/features/](docs/features/) | Feature docs (upload, browser, dashboard, metadata) |
-| [docs/design-system.md](docs/design-system.md) | Design tokens, primitives, AI elements, loader, error/empty states |
+| [ARCHITECTURE.md](ARCHITECTURE.md) | System layout, layering, data flows, B2 layout |
+| [docs/features/](docs/features/) | Depth jobs, depth estimation, pairs library, ingest, browser, dashboard, metadata |
 | [docs/app-workflows.md](docs/app-workflows.md) | User journeys |
 | [docs/dev-workflows.md](docs/dev-workflows.md) | Engineering workflows and testing |
 | [docs/SECURITY.md](docs/SECURITY.md) | Security principles |
 | [docs/RELIABILITY.md](docs/RELIABILITY.md) | Reliability expectations |
-| [docs/exec-plans/](docs/exec-plans/) | Execution plans and tech debt tracker |
-
-## Contributing
-
-Start with [AGENTS.md](AGENTS.md). It's the map — everything else is discoverable from there.
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
-
-## Claude Agent B2 Skill
-
-Manage Backblaze B2 from your terminal using natural language (list/search, audits, stale or large file detection, security checks, safe cleanup).
-
-Repo: [https://github.com/backblaze-b2-samples/claude-skill-b2-cloud-storage](https://github.com/backblaze-b2-samples/claude-skill-b2-cloud-storage)
+MIT License — see [LICENSE](LICENSE) for details.

@@ -11,7 +11,7 @@ def test_upload_allows_duplicate_filename(monkeypatch):
         "upload_file",
         lambda file_data, key, content_type: FileUploadResponse(
             key=key,
-            filename="report.txt",
+            filename="report.png",
             size_bytes=len(file_data),
             size_human="5 B",
             content_type=content_type,
@@ -27,13 +27,13 @@ def test_upload_allows_duplicate_filename(monkeypatch):
     )
 
     result = upload_service.process_upload(
-        file_data=b"hello",
-        filename="report.txt",
-        content_type="text/plain",
+        file_data=b"\x89PNG\r\n\x1a\n\x00\x00\x00\x00",
+        filename="report.png",
+        content_type="image/png",
         content_length=5,
     )
 
-    assert result.key == "uploads/report.txt"
+    assert result.key == "uploads/report.png"
 
 
 def test_upload_uses_original_filename(monkeypatch):
@@ -42,7 +42,7 @@ def test_upload_uses_original_filename(monkeypatch):
         "upload_file",
         lambda file_data, key, content_type: FileUploadResponse(
             key=key,
-            filename="report.txt",
+            filename="report.png",
             size_bytes=len(file_data),
             size_human="5 B",
             content_type=content_type,
@@ -58,10 +58,10 @@ def test_upload_uses_original_filename(monkeypatch):
     )
 
     result = upload_service.process_upload(
-        file_data=b"hello",
-        filename="report.txt",
-        content_type="text/plain",
+        file_data=b"\x89PNG\r\n\x1a\n\x00\x00\x00\x00",
+        filename="report.png",
+        content_type="image/png",
         content_length=5,
     )
 
-    assert result.key == "uploads/report.txt"
+    assert result.key == "uploads/report.png"

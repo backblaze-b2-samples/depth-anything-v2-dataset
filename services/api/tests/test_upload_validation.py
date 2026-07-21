@@ -66,8 +66,7 @@ def test_validate_extension_matches_type(filename, content_type, expected):
 
 _PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 8
 _JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 8
-_PDF = b"%PDF-1.7\n"
-_ZIP = b"PK\x03\x04" + b"\x00" * 8
+_WEBP = b"RIFF" + b"\x00" * 4 + b"WEBP" + b"\x00" * 8
 
 
 @pytest.mark.parametrize(
@@ -76,11 +75,10 @@ _ZIP = b"PK\x03\x04" + b"\x00" * 8
         (_PNG, "image/png", True),
         (b"<html>not a png", "image/png", False),  # spoofed image
         (_JPEG, "image/jpeg", True),
-        (_PDF, "application/pdf", True),
-        (b"nope", "application/pdf", False),
-        (_ZIP, "application/zip", True),
-        (b"any text at all", "text/plain", True),  # text has no signature
-        (b"{}", "application/json", True),  # json has no signature
+        (b"\x00\x00\x00", "image/jpeg", False),  # not a JPEG
+        (_WEBP, "image/webp", True),
+        (b"RIFF____NOTW", "image/webp", False),  # RIFF but not WEBP
+        (b"whatever", "image/svg+xml", True),  # unknown type → nothing to verify
     ],
 )
 def test_matches_content_signature(data, content_type, expected):
@@ -100,7 +98,9 @@ def test_rejects_oversized_content_length(monkeypatch):
 def test_rejects_oversized_body(monkeypatch):
     monkeypatch.setattr(upload_service.settings, "max_file_size", 5)
     with pytest.raises(UploadError) as exc:
-        process_upload(b"way too big", "a.txt", "text/plain", content_length=None)
+        # Valid PNG header so it passes type/extension/signature and reaches the
+        # body-size guard (the last check).
+        process_upload(_PNG, "a.png", "image/png", content_length=None)
     assert exc.value.status_code == 413
 
 
@@ -111,8 +111,9 @@ def test_rejects_disallowed_type():
 
 
 def test_rejects_extension_mismatch():
+    # Both types allowed, but a .png name declared as image/webp is a mismatch.
     with pytest.raises(UploadError) as exc:
-        process_upload(b"data", "a.png", "text/plain", content_length=4)
+        process_upload(_PNG, "a.png", "image/webp", content_length=4)
     assert exc.value.status_code == 415
 
 
@@ -125,7 +126,7 @@ def test_rejects_content_signature_mismatch():
 
 def test_rejects_empty_file():
     with pytest.raises(UploadError):
-        process_upload(b"", "a.txt", "text/plain", content_length=0)
+        process_upload(b"", "a.png", "image/png", content_length=0)
 
 
 # --- uploads_total metric increments ----------------------------------------
@@ -141,7 +142,7 @@ async def test_successful_upload_increments_uploads_metric(client, monkeypatch):
         "upload_file",
         lambda file_data, key, content_type: FileUploadResponse(
             key=key,
-            filename="a.txt",
+            filename="a.png",
             size_bytes=len(file_data),
             size_human="5 B",
             content_type=content_type,
@@ -155,7 +156,7 @@ async def test_successful_upload_increments_uploads_metric(client, monkeypatch):
     )
 
     resp = await client.post(
-        "/upload", files={"file": ("a.txt", b"hello", "text/plain")}
+        "/upload", files={"file": ("a.png", _PNG, "image/png")}
     )
     assert resp.status_code == 200
 

@@ -1,9 +1,15 @@
 import type {
+  CreateDepthJobInput,
   DailyUploadCount,
+  DepthDatasetStats,
+  DepthJob,
+  DepthPair,
   FileMetadata,
   FileUploadResponse,
   UploadStats,
-} from "@vibe-coding-starter-kit/shared";
+} from "@depth-anything-v2-dataset/shared";
+
+const JSON_HEADERS = { "Content-Type": "application/json" } as const;
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -208,4 +214,59 @@ export function uploadFile(
     xhr.open("POST", `${API_BASE}/upload`);
     xhr.send(formData);
   });
+}
+
+// --- Depth Jobs -------------------------------------------------------------
+
+export async function getJobs() {
+  return apiFetch<DepthJob[]>("/jobs");
+}
+
+export async function getJob(id: string) {
+  return apiFetch<DepthJob>(`/jobs/${encodeURIComponent(id)}`);
+}
+
+export async function createJob(input: CreateDepthJobInput) {
+  return apiFetch<DepthJob>("/jobs", {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(input),
+  });
+}
+
+export async function renameJob(id: string, name: string) {
+  return apiFetch<DepthJob>(`/jobs/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function deleteJob(id: string) {
+  return apiFetch<{ deleted: boolean; id: string }>(
+    `/jobs/${encodeURIComponent(id)}`,
+    { method: "DELETE" }
+  );
+}
+
+export async function runJob(id: string) {
+  return apiFetch<DepthJob>(`/jobs/${encodeURIComponent(id)}/run`, {
+    method: "POST",
+  });
+}
+
+export async function getJobPairs(id: string) {
+  return apiFetch<DepthPair[]>(`/jobs/${encodeURIComponent(id)}/pairs`);
+}
+
+export async function getLibraryPairs(limit = 200) {
+  return apiFetch<DepthPair[]>(`/library/pairs?limit=${limit}`);
+}
+
+export async function getDatasetStats() {
+  return apiFetch<DepthDatasetStats>("/jobs/stats");
+}
+
+export async function getSourcePrefixes() {
+  return apiFetch<string[]>("/jobs/source-prefixes");
 }

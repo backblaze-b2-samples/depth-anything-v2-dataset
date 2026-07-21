@@ -23,15 +23,7 @@ class FileMetadataDetail(BaseModel):
     md5: str
     sha256: str
     uploaded_at: datetime
-    # Image-specific
+    # Image-specific (this app ingests images only)
     image_width: int | None = None
     image_height: int | None = None
     exif: dict | None = None
-    # PDF-specific
-    pdf_pages: int | None = None
-    pdf_author: str | None = None
-    pdf_title: str | None = None
-    # Audio/Video
-    duration_seconds: float | None = None
-    codec: str | None = None
-    bitrate: int | None = None

@@ -1,17 +1,14 @@
 "use client";
 
-import { FileIcon, HardDrive, Upload, Download } from "lucide-react";
+import { Layers, ImageIcon, Boxes, HardDrive } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ErrorState } from "@/components/ui/error-state";
-import { useFileStats } from "@/lib/queries";
+import { useDatasetStats } from "@/lib/queries";
 
 export function StatsCards() {
-  const { data: stats, isLoading, error, refetch } = useFileStats();
+  const { data: stats, isLoading, error, refetch } = useDatasetStats();
 
-  // Surface fetch failures inline rather than rendering "0 files / 0 B" —
-  // that lies to the user about the bucket state when really the API is
-  // just unreachable.
   if (error) {
     return (
       <Card>
@@ -23,10 +20,27 @@ export function StatsCards() {
   }
 
   const cards = [
-    { title: "Total Files", value: stats?.total_files ?? 0, icon: FileIcon },
-    { title: "Storage Used", value: stats?.total_size_human ?? "0 B", icon: HardDrive },
-    { title: "Uploads Today", value: stats?.uploads_today ?? 0, icon: Upload },
-    { title: "Total Downloads", value: stats?.total_downloads ?? 0, icon: Download },
+    { title: "Depth Jobs", value: stats?.total_jobs ?? 0, icon: Layers, sub: null },
+    {
+      title: "Images Processed",
+      value: stats?.images_processed ?? 0,
+      icon: ImageIcon,
+      sub: null,
+    },
+    {
+      title: "Depth Maps Stored",
+      value: stats?.depth_maps_stored ?? 0,
+      icon: Boxes,
+      sub: null,
+    },
+    {
+      title: "Total Storage",
+      value: stats?.total_bytes_human ?? "0 B",
+      icon: HardDrive,
+      sub: stats
+        ? `${stats.source_bytes_human} source + ${stats.depth_bytes_human} depth · ${stats.amplification_ratio}× amplification`
+        : null,
+    },
   ];
 
   return (
@@ -48,7 +62,12 @@ export function StatsCards() {
             {isLoading ? (
               <Skeleton className="h-8 w-24" />
             ) : (
-              <div className="stat-value">{card.value}</div>
+              <>
+                <div className="stat-value">{card.value}</div>
+                {card.sub && (
+                  <p className="mt-1 text-[11px] text-muted-foreground">{card.sub}</p>
+                )}
+              </>
             )}
           </CardContent>
         </Card>

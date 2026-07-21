@@ -38,22 +38,6 @@ def _extract_image_metadata(file_data: bytes) -> dict:
         return {}
 
 
-def _extract_pdf_metadata(file_data: bytes) -> dict:
-    try:
-        from PyPDF2 import PdfReader
-
-        reader = PdfReader(io.BytesIO(file_data))
-        info = reader.metadata
-        return {
-            "pdf_pages": len(reader.pages),
-            "pdf_author": info.author if info else None,
-            "pdf_title": info.title if info else None,
-        }
-    except Exception:
-        logger.warning("PDF metadata extraction failed", exc_info=True)
-        return {}
-
-
 def extract_metadata(
     file_data: bytes,
     filename: str,
@@ -63,12 +47,11 @@ def extract_metadata(
     sha256 = hashlib.sha256(file_data).hexdigest()
     extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
+    # This app ingests images only; source resolution is relevant to depth, so
+    # we keep dimensions + hashes. No PDF/audio/video branches.
     extra: dict = {}
-
     if content_type.startswith("image/"):
         extra = _extract_image_metadata(file_data)
-    elif content_type == "application/pdf":
-        extra = _extract_pdf_metadata(file_data)
 
     return FileMetadataDetail(
         filename=filename,

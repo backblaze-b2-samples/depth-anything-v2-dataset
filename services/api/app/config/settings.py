@@ -2,11 +2,18 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    b2_endpoint: str = "https://s3.us-west-004.backblazeb2.com"
-    b2_key_id: str = ""
+    # --- Backblaze B2 (Standard B2_* env names) ---
+    # Required at startup: key id, key, bucket (see main.py boot gate).
+    b2_application_key_id: str = ""
     b2_application_key: str = ""
     b2_bucket_name: str = ""
-    b2_public_url: str = ""
+    # Region drives the S3 endpoint. Default is B2's default region; override
+    # with B2_REGION for a bucket created elsewhere. No region string is baked
+    # into any S3 call — the endpoint is derived from this value below.
+    b2_region: str = "us-west-004"
+    # Optional public URL base for objects (a convenience, NOT required — must
+    # never be in the startup boot gate). Presigned URLs are used regardless.
+    b2_public_url_base: str = ""
 
     api_port: int = 8000
     # Interactive API docs (/docs, /redoc, /openapi.json). On by default for
@@ -44,6 +51,22 @@ class Settings(BaseSettings):
     # volume in production if you care about surviving restarts.
     download_count_file: str = "data/download_count.json"
 
+    # --- Depth Anything V2 (local inference — no API key) ---
+    # HuggingFace checkpoint. Small is the CPU-friendly default; Base/Large are
+    # selectable from the create form / env.
+    depth_model_id: str = "depth-anything/Depth-Anything-V2-Small-hf"
+    # Output artifacts to write per image: "png16" (16-bit PNG), "npy", or "both".
+    depth_output_format: str = "png16"
+    # Bounded demo run: cap the images processed per synchronous run.
+    depth_max_images_per_run: int = 8
+    # Device selection: auto|cpu|cuda|mps. "auto" prefers CUDA -> MPS -> CPU,
+    # always falling back to CPU. Never hard-requires a GPU.
+    depth_device: str = "auto"
+    # B2 prefixes for the sample's own output. Job artifacts live under
+    # depth/<job_id>/; job records under depth-jobs/<job_id>.json.
+    depth_output_prefix: str = "depth/"
+    depth_jobs_prefix: str = "depth-jobs/"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     @property
@@ -51,6 +74,12 @@ class Settings(BaseSettings):
         # Drop empties so a trailing comma or API_CORS_ORIGINS="" doesn't yield
         # a stray "" origin.
         return [o.strip() for o in self.api_cors_origins.split(",") if o.strip()]
+
+    @property
+    def b2_endpoint_url(self) -> str:
+        """Derive the S3 endpoint from the region. No region literal is embedded
+        in any S3 client call — it flows from the B2_REGION setting only."""
+        return f"https://s3.{self.b2_region}.backblazeb2.com"
 
 
 settings = Settings()

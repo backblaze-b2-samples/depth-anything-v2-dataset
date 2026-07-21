@@ -18,18 +18,20 @@ infra/railway/     Deployment config
 
 When this repo is used as the foundation for a new app, the following pieces are part of the starter contract — keep them. Adapt only what the new use case actually requires.
 
+This app (`depth-anything-v2-dataset`, workspace scope `@depth-anything-v2-dataset/*`)
+is built on the vibe-coding-starter-kit foundation. Keep the shared scaffolding; the
+depth surface is what makes it this app.
+
 **Keep as-is (do not strip, rename, or replace)**
 - **UI kit / design system.** `apps/web/src/components/ui/` (shadcn primitives), the design tokens in `apps/web/src/app/globals.css`, and the `/design` reference page. Build new screens with these primitives; never edit the generated `components/ui/` files directly. Restyling happens through tokens in `globals.css`.
-- **File Explorer.** `/files` route, `apps/web/src/app/files/`, and `apps/web/src/components/files/`. The Files sidebar entry in `apps/web/src/components/layout/app-sidebar.tsx` stays.
-- **Upload.** `/upload` route, `apps/web/src/app/upload/`, and `apps/web/src/components/upload/`. The Upload sidebar entry stays.
-- The sidebar nav itself (Dashboard, Upload, Files, Settings, plus the Design System utility link).
+- **File Explorer.** `/files` route, `apps/web/src/app/files/`, and `apps/web/src/components/files/` — the full-bucket browser. The Files sidebar entry stays.
+- **Upload (image ingest).** `/upload` route + `apps/web/src/components/upload/`. The Upload sidebar entry stays.
 
-**Adapt to the new use case**
-- **Dashboard.** `/` route and `apps/web/src/components/dashboard/` (stats cards, upload chart, recent uploads table) are illustrative defaults. Replace them with metrics, charts, and tables that reflect what the new app actually does (e.g. transcripts processed, embeddings indexed, classifications run). New aggregations must flow through the same `runtime -> service -> repo` layering and be exposed via TanStack Query hooks in `apps/web/src/lib/queries.ts` — no bare `useEffect + fetch`.
-- Update `docs/features/dashboard.md` in the same PR as any dashboard change (see §9).
-
-**Why this contract exists**
-- The UI kit, Files, and Upload pages are the reusable B2-backed scaffolding that makes this a starter kit — stripping them defeats the purpose. The dashboard is the only screen explicitly designed to be rewritten per app.
+**App-specific (the depth surface)**
+- **Depth Jobs (primary entity).** `/jobs` + `/jobs/[id]`, `apps/web/src/components/jobs/`, backend `types/jobs.py`, `repo/jobs.py`, `service/{depth,encode,jobs}.py`, `runtime/jobs.py`. Full lifecycle: create/read/edit(rename)/delete/run.
+- **Pairs Library.** `/library` — scoped source→depth-preview gallery (distinct from `/files`).
+- **Dashboard.** `/` + `apps/web/src/components/dashboard/` — depth dataset metrics (jobs, images processed, source-vs-depth storage split + amplification). New aggregations flow through `runtime -> service -> repo` and are exposed via TanStack Query hooks in `apps/web/src/lib/queries.ts` — no bare `useEffect + fetch`.
+- Sidebar nav: Dashboard, Upload, Depth Jobs, Pairs Library, Files, Settings + the Design System utility link. Register new routes in the header `pageTitles` map too.
 
 ## 3. Architectural Invariants
 
@@ -41,6 +43,8 @@ When this repo is used as the foundation for a new app, the following pieces are
 - All external APIs wrapped in `repo/` adapters
 - All request/response data validated at boundary (Pydantic models)
 - No shared mutable state across layers
+- **Lazy ML imports.** `torch`/`transformers` are imported INSIDE functions in `service/depth.py` only — never at module top level — so app import and hermetic test collection never load heavy ML or trigger a model download. `numpy`/`PIL` (in `service/encode.py`) are lightweight and imported normally.
+- **Local device autodetect.** Depth runs default to CPU and auto-detect CUDA → MPS → CPU; never hard-require a GPU.
 
 **Frontend**: shadcn/ui components in `src/components/ui/` are generated — never modify them.
 

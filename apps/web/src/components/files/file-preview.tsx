@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { usePreviewUrl } from "@/lib/queries";
-import type { FileMetadata } from "@vibe-coding-starter-kit/shared";
+import type { FileMetadata } from "@depth-anything-v2-dataset/shared";
 
 interface FilePreviewProps {
   file: FileMetadata | null;
