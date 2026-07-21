@@ -38,6 +38,10 @@ class DepthJob(BaseModel):
     status: DepthJobStatus
     created_at: datetime
     updated_at: datetime
+    # matched_count = images matched in the source prefix; image_count = images
+    # this run will actually process (capped at DEPTH_MAX_IMAGES_PER_RUN). When
+    # matched_count > image_count the run was capped — the UI must surface that.
+    matched_count: int = 0
     image_count: int = 0
     processed_count: int = 0
     source_bytes: int = 0

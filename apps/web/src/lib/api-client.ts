@@ -180,12 +180,16 @@ export async function deleteFile(key: string) {
 
 export function uploadFile(
   file: File,
-  onProgress?: (percent: number) => void
+  onProgress?: (percent: number) => void,
+  scene?: string
 ): Promise<FileUploadResponse> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const formData = new FormData();
     formData.append("file", file);
+    if (scene && scene.trim()) {
+      formData.append("scene", scene.trim());
+    }
 
     xhr.upload.addEventListener("progress", (e) => {
       if (e.lengthComputable && onProgress) {

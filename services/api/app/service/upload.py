@@ -62,6 +62,28 @@ def sanitize_filename(filename: str) -> str:
     return name or "unnamed"
 
 
+def sanitize_scene(scene: str) -> str:
+    """Sanitize an optional scene/session name into a single safe path segment.
+
+    Slashes are collapsed (a scene is exactly one prefix level under uploads/),
+    unsafe chars are replaced, and empty/all-unsafe input yields "" so the caller
+    falls back to the flat uploads/ prefix.
+    """
+    name = scene.replace("\\", "/").replace("/", "_")
+    name = name.replace("\x00", "")
+    name = _SAFE_FILENAME_RE.sub("_", name)
+    name = re.sub(r"[_.]{2,}", "_", name)
+    name = name.strip("._")
+    return name[:100]
+
+
+def upload_prefix(scene: str = "") -> str:
+    """The B2 prefix (ending in /) ingested files land under for a given scene.
+    Defaults to the flat uploads/ prefix when no (usable) scene is given."""
+    seg = sanitize_scene(scene)
+    return f"uploads/{seg}/" if seg else "uploads/"
+
+
 def validate_extension_matches_type(filename: str, content_type: str) -> bool:
     """Verify the file extension is consistent with the declared MIME type."""
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
@@ -87,8 +109,13 @@ def process_upload(
     filename: str,
     content_type: str,
     content_length: int | None = None,
+    scene: str = "",
 ) -> FileUploadResponse:
-    """Validate and process a file upload. Raises UploadError on failure."""
+    """Validate and process a file upload. Raises UploadError on failure.
+
+    An optional `scene` groups ingested files under a per-scene sub-prefix
+    (uploads/<scene>/); empty scene keeps the flat uploads/ prefix.
+    """
     if not filename:
         raise UploadError("No filename provided")
 
@@ -127,7 +154,7 @@ def process_upload(
 
     # B2 buckets are always versioned — uploading the same key creates a new
     # version automatically.  No duplicate rejection needed.
-    key = f"uploads/{safe_name}"
+    key = f"{upload_prefix(scene)}{safe_name}"
     result = upload_file(file_data, key, content_type)
     metadata = extract_metadata(file_data, safe_name, content_type)
 

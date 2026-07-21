@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -69,11 +70,24 @@ const schema = z
 
 type FormValues = z.infer<typeof schema>;
 
-export function CreateJobDialog() {
-  const [open, setOpen] = useState(false);
-  const [prefixIsCustom, setPrefixIsCustom] = useState(false);
+interface CreateJobDialogProps {
+  // Deep-link from /upload: `?create=1&prefix=uploads/<scene>/` opens the dialog
+  // with the just-ingested prefix prefilled, chaining ingest → job creation.
+  // The parent (a server component) reads searchParams and passes these in, so
+  // no client effect / Suspense boundary is needed to open the dialog.
+  initialOpen?: boolean;
+  initialPrefix?: string;
+}
+
+export function CreateJobDialog({
+  initialOpen = false,
+  initialPrefix = "",
+}: CreateJobDialogProps = {}) {
+  const [open, setOpen] = useState(initialOpen);
+  const [prefixIsCustom, setPrefixIsCustom] = useState(!!initialPrefix);
   const { data: prefixes = [] } = useSourcePrefixes();
   const createJob = useCreateJob();
+  const router = useRouter();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -81,10 +95,17 @@ export function CreateJobDialog() {
       name: "",
       model: "small",
       output_format: "png16",
-      source_prefix: "",
-      custom_prefix: "",
+      source_prefix: initialPrefix ? CUSTOM : "",
+      custom_prefix: initialPrefix,
     },
   });
+
+  // Strip the deep-link params after opening so a refresh / back-nav doesn't
+  // reopen the dialog. No setState here — the open state is already seeded from
+  // the initial props above.
+  useEffect(() => {
+    if (initialOpen) router.replace("/jobs", { scroll: false });
+  }, [initialOpen, router]);
 
   const onSubmit = (values: FormValues) => {
     const prefix =
@@ -172,7 +193,10 @@ export function CreateJobDialog() {
                     </SelectContent>
                   </Select>
                   <FormDescription>
-                    e.g. demo-scene/ (run scripts/seed-demo.py to populate)
+                    Pick the prefix your images landed under — the Upload page
+                    writes to <code>uploads/</code> (or <code>uploads/&lt;scene&gt;/</code>
+                    when you set a scene). Or run <code>scripts/seed-demo.py</code> to
+                    populate <code>demo-scene/</code>.
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

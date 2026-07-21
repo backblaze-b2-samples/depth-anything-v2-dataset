@@ -18,7 +18,7 @@ from app.service.jobs import (
     list_jobs,
     list_source_prefixes,
     rename_job,
-    run_job,
+    start_job_run,
 )
 from app.types import (
     CreateDepthJob,
@@ -96,7 +96,9 @@ def delete_job_endpoint(job_id: str):
 @router.post("/jobs/{job_id}/run", response_model=DepthJob)
 def run_job_endpoint(job_id: str):
     try:
-        return run_job(job_id)
+        # Returns immediately with status="running"; the run proceeds in a
+        # background worker thread and the client polls GET /jobs/{id}.
+        return start_job_run(job_id)
     except JobNotFoundError as e:
         raise HTTPException(status_code=404, detail=e.detail) from None
     except JobStateError as e:

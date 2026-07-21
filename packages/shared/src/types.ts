@@ -67,6 +67,9 @@ export interface DepthJob {
   status: DepthJobStatus;
   created_at: string;
   updated_at: string;
+  // matched_count = images found in the source prefix; image_count = images this
+  // run processes (capped at DEPTH_MAX_IMAGES_PER_RUN). matched > image ⇒ capped.
+  matched_count: number;
   image_count: number;
   processed_count: number;
   source_bytes: number;

@@ -122,6 +122,8 @@ def test_run_job_writes_artifacts_and_pairs(fake_repo, monkeypatch):
 
     assert result.status == "completed"
     assert result.processed_count == 1
+    assert result.matched_count == 1
+    assert result.image_count == 1
     assert result.device_used == "cpu"
     # Preview is always written; both png16 + npy for output_format="both".
     assert any(k.endswith(".depth_preview.png") for k in puts)
@@ -132,6 +134,71 @@ def test_run_job_writes_artifacts_and_pairs(fake_repo, monkeypatch):
     assert len(pairs) == 1
     assert pairs[0].preview_url.startswith("https://signed.example/")
     assert pairs[0].image_url.startswith("https://signed.example/")
+
+
+def _mock_depth(monkeypatch, sources):
+    """Wire up repo + depth mocks for a run over `sources` (list of {key,size})."""
+    monkeypatch.setattr(svc.repo, "list_source_images", lambda prefix: sources)
+    monkeypatch.setattr(svc.repo, "get_object_bytes", lambda key: b"imagebytes")
+    monkeypatch.setattr(svc.repo, "put_artifact", lambda key, data, ct: len(data))
+    monkeypatch.setattr(svc.depth, "select_device", lambda requested: "cpu")
+    monkeypatch.setattr(
+        svc.depth,
+        "estimate_depth",
+        lambda data, model_id, device: (
+            np.zeros((4, 4), dtype="float32"),
+            4,
+            4,
+            "cpu",
+        ),
+    )
+
+
+def test_run_job_caps_and_reports_matched_count(fake_repo, monkeypatch):
+    # 5 images in the prefix, cap of 2: matched=5 (honest total), processed=2.
+    monkeypatch.setattr(svc.settings, "depth_max_images_per_run", 2)
+    _mock_depth(
+        monkeypatch,
+        [{"key": f"demo-scene/{i}.png", "size": 100} for i in range(5)],
+    )
+
+    result = svc.run_job(_create().id)
+    assert result.matched_count == 5
+    assert result.image_count == 2
+    assert result.processed_count == 2
+
+
+def test_start_job_run_returns_running_then_completes(fake_repo, monkeypatch):
+    _mock_depth(monkeypatch, [{"key": "demo-scene/a.png", "size": 100}])
+
+    # Run the background worker synchronously for a deterministic assertion.
+    class _SyncThread:
+        def __init__(self, target, args=(), **kwargs):
+            self._target = target
+            self._args = args
+
+        def start(self):
+            self._target(*self._args)
+
+    monkeypatch.setattr(svc.threading, "Thread", _SyncThread)
+
+    job = _create()
+    started = svc.start_job_run(job.id)
+    # The HTTP caller sees a running job immediately (async run lifecycle).
+    assert started.status == "running"
+    assert started.processed_count == 0
+    # The worker (run synchronously here) drove it to completion + persisted it.
+    final = svc.get_job(job.id)
+    assert final.status == "completed"
+    assert final.processed_count == 1
+
+
+def test_run_already_running_raises(fake_repo):
+    job = _create()
+    job.status = "running"
+    svc.repo.save_job(job)
+    with pytest.raises(svc.JobStateError):
+        svc.run_job(job.id)
 
 
 def test_dataset_stats_amplification(fake_repo, monkeypatch):

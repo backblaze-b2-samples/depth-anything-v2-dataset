@@ -116,19 +116,26 @@ export function useJobs() {
   });
 }
 
+// While a run is in progress the backend advances status/processed_count, so
+// poll until the job reaches a terminal state, then stop.
 export function useJob(id: string | undefined) {
   return useQuery<DepthJob, ApiError>({
     queryKey: qk.job(id ?? ""),
     queryFn: () => getJob(id as string),
     enabled: !!id,
+    refetchInterval: (query) =>
+      query.state.data?.status === "running" ? 1500 : false,
   });
 }
 
-export function useJobPairs(id: string | undefined) {
+// `poll` is driven by the caller (true while the parent job is running) so the
+// pairs grid refreshes as the manifest is written; polling stops otherwise.
+export function useJobPairs(id: string | undefined, poll = false) {
   return useQuery({
     queryKey: qk.jobPairs(id ?? ""),
     queryFn: () => getJobPairs(id as string),
     enabled: !!id,
+    refetchInterval: poll ? 1500 : false,
   });
 }
 

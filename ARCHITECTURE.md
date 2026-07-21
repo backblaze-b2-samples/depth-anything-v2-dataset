@@ -116,9 +116,9 @@ See [docs/SECURITY.md](docs/SECURITY.md) for full security documentation.
 
 ## Data Flows
 
-- **Ingest**: Browser -> `POST /upload` (multipart) -> API validates (images only) -> repo writes to B2 -> response
+- **Ingest**: Browser -> `POST /upload` (multipart, optional `scene` form field) -> API validates (images only) -> repo writes to B2 under `uploads/` (or `uploads/<scene>/`) -> response. After completion the UI offers a "Create a Depth Job" CTA that deep-links to the create dialog with the ingested prefix prefilled.
 - **Create job**: Browser -> `POST /jobs` -> service builds a `pending` `DepthJob` -> repo writes `depth-jobs/<id>.json`
-- **Run job**: Browser -> `POST /jobs/{id}/run` -> service lists source images (repo) -> for each: get bytes (repo) -> `service/depth.estimate_depth` (local inference) -> `service/encode` -> `put_object` artifacts (repo) -> write `manifest.jsonl` -> flip status
+- **Run job (async)**: Browser -> `POST /jobs/{id}/run` -> service validates, records `matched_count` (total images in prefix) vs `image_count` (capped at `DEPTH_MAX_IMAGES_PER_RUN`), flips status to `running` and returns immediately. A background worker thread then, for each image: get bytes (repo) -> `service/depth.estimate_depth` (local inference) -> `service/encode` -> `put_object` artifacts (repo), saving the job after each image so `processed_count` advances. Finally writes `manifest.jsonl` and flips status to `completed`/`failed`. The browser polls `GET /jobs/{id}` (spinner + determinate progress bar) until a terminal state.
 - **Serve pairs**: Browser -> `GET /jobs/{id}/pairs` or `GET /library/pairs` -> service reads manifest(s) (repo) -> repo presigns source + preview URLs -> grid renders media inline
 - **Delete job**: Browser -> `DELETE /jobs/{id}` -> service -> repo deletes `depth/<id>/*` + record (prefix-scoped)
 - **Dashboard**: Browser -> `GET /jobs/stats` -> service aggregates job records (repo)

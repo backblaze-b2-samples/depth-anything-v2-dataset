@@ -26,21 +26,29 @@ ready to run a Depth Job over.
 ## Inputs
 - file: `File` (browser multipart form data)
 - content_type: string (image/jpeg, image/png, image/webp)
+- scene: string (optional multipart form field) — groups the batch under a
+  per-scene sub-prefix; empty keeps the flat `uploads/` prefix
 
 ## Outputs
 - `FileUploadResponse`: key, filename, size, content_type, uploaded_at, url, metadata
-- Side effect: image stored in B2 under `uploads/{sanitized_filename}`
+- Side effect: image stored in B2 under `uploads/{sanitized_filename}` (or
+  `uploads/{scene}/{sanitized_filename}` when a scene is given)
 
 ## Flow
-- User drops or selects images in the dropzone
+- User optionally names a **Scene**, then drops or selects images in the dropzone
 - Client validates size (max 100MB) and type — this app accepts JPEG / PNG / WebP only
-- XHR sends multipart POST to `/upload` with progress events
+- XHR sends multipart POST to `/upload` (with the `scene` field when set) and progress events
 - API checks `Content-Length` early, validates type against the image allow-list
   (SVG excluded — stored-XSS risk), sanitizes the filename, checks extension↔type,
   reads in 1MB chunks with streaming size enforcement, rejects empty files, and
   verifies the leading bytes match the declared image type (magic-byte check)
-- API stores under `uploads/{sanitized_filename}` via `put_object`, extracts
-  metadata (checksums + image dimensions), and returns `FileUploadResponse`
+- API sanitizes the optional scene into a single safe path segment
+  (`service.sanitize_scene` / `upload_prefix`), stores under
+  `uploads/{scene?}/{sanitized_filename}` via `put_object`, extracts metadata
+  (checksums + image dimensions), and returns `FileUploadResponse`
+- After the queue finishes, the UI shows a **"Create a Depth Job from these
+  images"** CTA that deep-links to `/jobs?create=1&prefix=<ingested-prefix>`
+  (prefix derived from the returned key), chaining ingest → job creation
 
 ## Edge Cases
 - File exceeds 100MB → client-rejected row + toast; API returns 413 if bypassed
@@ -52,10 +60,10 @@ ready to run a Depth Job over.
 - B2 unreachable → API returns 500; UI keeps failed rows retryable
 
 ## UX States
-- Empty: dropzone with instructions
-- Loading: per-file progress bars
+- Empty: optional Scene field + dropzone with instructions
+- Loading: per-file progress bars (Scene field disabled)
 - Error: red status icon + per-file reason, retry when applicable
-- Complete: green checkmark, "Clear finished"
+- Complete: green checkmark, "Create a Depth Job from these images" CTA + "Clear finished"
 
 ## Verification
 - Test files: `services/api/tests/test_upload_validation.py`,

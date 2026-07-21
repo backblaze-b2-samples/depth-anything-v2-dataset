@@ -1,10 +1,14 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import Link from "next/link";
+import { ArrowRight } from "lucide-react";
 import { toast } from "sonner";
 import type { FileRejection } from "react-dropzone";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Dropzone } from "./dropzone";
 import { UploadProgress, type UploadItem } from "./upload-progress";
 import { uploadFile } from "@/lib/api-client";
@@ -77,10 +81,14 @@ function getUploadSummary(items: UploadItem[]) {
 export function UploadForm() {
   const [items, setItems] = useState<UploadItem[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [scene, setScene] = useState("");
+  // The actual B2 prefix the last batch landed under (derived from the server's
+  // returned key), used to prefill the "Create a Depth Job" deep link.
+  const [destPrefix, setDestPrefix] = useState<string | null>(null);
   const { triggerRefresh } = useRefresh();
 
   const uploadItems = useCallback(
-    async (queue: UploadItem[]) => {
+    async (queue: UploadItem[], sceneArg: string) => {
       if (queue.length === 0) return;
 
       setUploading(true);
@@ -103,13 +111,21 @@ export function UploadForm() {
           );
 
           try {
-            await uploadFile(item.file, (percent) => {
-              setItems((prev) =>
-                prev.map((i) =>
-                  i.id === item.id ? { ...i, progress: percent } : i
-                )
-              );
-            });
+            const resp = await uploadFile(
+              item.file,
+              (percent) => {
+                setItems((prev) =>
+                  prev.map((i) =>
+                    i.id === item.id ? { ...i, progress: percent } : i
+                  )
+                );
+              },
+              sceneArg
+            );
+            // Derive the true destination prefix from the returned key so the
+            // "Create a Depth Job" CTA targets exactly what was just ingested.
+            const slash = resp.key.lastIndexOf("/");
+            if (slash >= 0) setDestPrefix(resp.key.slice(0, slash + 1));
             setItems((prev) =>
               prev.map((i) =>
                 i.id === item.id
@@ -174,9 +190,9 @@ export function UploadForm() {
 
       const newItems = files.map(createUploadItem);
       setItems((prev) => [...prev, ...newItems]);
-      void uploadItems(newItems);
+      void uploadItems(newItems, scene);
     },
-    [uploadItems, uploading]
+    [uploadItems, uploading, scene]
   );
 
   const retryUpload = useCallback(
@@ -186,9 +202,9 @@ export function UploadForm() {
       const item = items.find((i) => i.id === id);
       if (!item || item.retryable === false) return;
 
-      void uploadItems([item]);
+      void uploadItems([item], scene);
     },
-    [items, uploadItems, uploading]
+    [items, uploadItems, uploading, scene]
   );
 
   const clearCompleted = useCallback(() => {
@@ -198,6 +214,7 @@ export function UploadForm() {
   const hasCompleted = items.some(
     (i) => i.status === "complete" || i.status === "error"
   );
+  const hasSuccessfulUpload = items.some((i) => i.status === "complete");
   const uploadSummary = getUploadSummary(items);
 
   return (
@@ -206,6 +223,21 @@ export function UploadForm() {
         <CardTitle className="card-title">Upload Files</CardTitle>
       </CardHeader>
       <CardContent className="p-5 space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="scene">Scene (optional)</Label>
+          <Input
+            id="scene"
+            placeholder="e.g. living-room"
+            value={scene}
+            onChange={(e) => setScene(e.target.value)}
+            disabled={uploading}
+          />
+          <p className="text-xs text-muted-foreground">
+            Groups this batch under <code>uploads/&lt;scene&gt;/</code> so a Depth
+            Job can target just this scene. Leave blank to ingest into the shared{" "}
+            <code>uploads/</code> prefix.
+          </p>
+        </div>
         <Dropzone
           onFilesSelected={handleFilesSelected}
           onFilesRejected={handleFilesRejected}
@@ -225,7 +257,19 @@ export function UploadForm() {
           onRetry={retryUpload}
         />
         {hasCompleted && !uploading && (
-          <div className="flex justify-end">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {hasSuccessfulUpload && destPrefix ? (
+              <Button asChild size="sm">
+                <Link
+                  href={`/jobs?create=1&prefix=${encodeURIComponent(destPrefix)}`}
+                >
+                  Create a Depth Job from these images
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Link>
+              </Button>
+            ) : (
+              <span />
+            )}
             <Button
               aria-label="Clear completed and failed uploads"
               variant="outline"

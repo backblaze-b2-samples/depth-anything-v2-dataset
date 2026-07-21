@@ -7,6 +7,7 @@ the per-job manifest is the index that pairs source image -> depth artifacts.
 """
 
 import logging
+import threading
 import uuid
 from datetime import UTC, datetime
 
@@ -109,11 +110,13 @@ def _write_artifacts(job: DepthJob, image_key, arr) -> tuple[str | None, str, in
     return depth_key, preview_key, written
 
 
-def run_job(job_id: str) -> DepthJob:
-    """Run Depth Anything V2 over the source images (synchronous, capped at
-    DEPTH_MAX_IMAGES_PER_RUN for a bounded demo run). Writes artifacts + manifest
-    and flips status to completed (or failed, recording the error)."""
+def _prepare_run(job_id: str) -> tuple[DepthJob, list[dict]]:
+    """Validate the job, list + cap its source images, flip it to `running` and
+    persist the count of images matched vs. images this run will process. Returns
+    the running job plus the (capped) image list to process."""
     job = get_job(job_id)
+    if job.status == "running":
+        raise JobStateError("Job is already running")
     if job.status == "completed":
         raise JobStateError("Job already completed")
 
@@ -122,10 +125,25 @@ def run_job(job_id: str) -> DepthJob:
         raise JobStateError(f"No source images found under '{job.source_prefix}'")
 
     selected = sources[: settings.depth_max_images_per_run]
+    # matched_count is the honest total in the prefix; image_count is what this
+    # run processes (capped). Surfacing both lets the UI flag a capped run.
+    job.matched_count = len(sources)
+    job.image_count = len(selected)
+    job.processed_count = 0
+    job.source_bytes = 0
+    job.depth_bytes = 0
+    job.device_used = None
+    job.error = None
     job.status = "running"
     job.updated_at = datetime.now(UTC)
     repo.save_job(job)
+    return job, selected
 
+
+def _execute_run(job: DepthJob, selected: list[dict]) -> DepthJob:
+    """Run Depth Anything V2 over the (already-capped) `selected` images, saving
+    the job after each image so a polling client sees `processed_count` advance.
+    Flips status to completed (or failed, recording the error)."""
     device = depth.select_device(job.device)
     manifest: list[dict] = []
     source_bytes = depth_bytes = processed = 0
@@ -152,6 +170,13 @@ def run_job(job_id: str) -> DepthJob:
                     "depth_bytes": written,
                 }
             )
+            # Persist live progress so GET /jobs/{id} advances during the run.
+            job.processed_count = processed
+            job.source_bytes = source_bytes
+            job.depth_bytes = depth_bytes
+            job.device_used = device_used
+            job.updated_at = datetime.now(UTC)
+            repo.save_job(job)
     except Exception as e:
         # Record and surface the failure — don't crash the worker thread.
         job.status = "failed"
@@ -179,6 +204,29 @@ def run_job(job_id: str) -> DepthJob:
         device_used,
     )
     return job
+
+
+def start_job_run(job_id: str) -> DepthJob:
+    """Kick off a run asynchronously: validate + flip to `running`, then process
+    the images in a background worker thread. Returns immediately with the
+    `running` job so the client can poll GET /jobs/{id} for live progress."""
+    job, selected = _prepare_run(job_id)
+    worker = threading.Thread(
+        target=_execute_run,
+        # Hand the worker its own copy so mutating it can't race the response.
+        args=(job.model_copy(deep=True), selected),
+        name=f"depth-run-{job.id}",
+        daemon=True,
+    )
+    worker.start()
+    return job
+
+
+def run_job(job_id: str) -> DepthJob:
+    """Synchronous full run (blocks until terminal). Kept for tests and any
+    caller that needs to await completion; the HTTP route uses start_job_run."""
+    job, selected = _prepare_run(job_id)
+    return _execute_run(job, selected)
 
 
 def _pairs_from_manifest(job_id: str, lines: list[dict]) -> list[DepthPair]:

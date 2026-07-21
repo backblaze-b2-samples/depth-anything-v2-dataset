@@ -8,6 +8,8 @@ from app.service.upload import (
     matches_content_signature,
     process_upload,
     sanitize_filename,
+    sanitize_scene,
+    upload_prefix,
     validate_extension_matches_type,
 )
 from app.types import FileUploadResponse
@@ -42,6 +44,37 @@ def test_sanitize_filename_truncates_long_names(raw):
     result = sanitize_filename(raw)
     assert len(result) <= 200
     assert not result.startswith(".")
+
+
+# --- sanitize_scene / upload_prefix (per-scene ingest prefix) ---------------
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("living-room", "living-room"),  # already safe
+        ("my scene", "my_scene"),  # space substituted
+        ("a/b/c", "a_b_c"),  # slashes collapsed to one segment
+        ("../etc", "etc"),  # traversal neutralized (leading _._ stripped)
+        ("  ", ""),  # whitespace-only → empty (falls back to flat prefix)
+        ("", ""),  # empty → empty
+    ],
+)
+def test_sanitize_scene(raw, expected):
+    assert sanitize_scene(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("scene", "expected"),
+    [
+        ("", "uploads/"),  # no scene → flat prefix (default behavior)
+        ("living-room", "uploads/living-room/"),
+        ("a/b", "uploads/a_b/"),  # nested collapsed to one safe segment
+        ("   ", "uploads/"),  # all-unsafe → flat prefix
+    ],
+)
+def test_upload_prefix(scene, expected):
+    assert upload_prefix(scene) == expected
 
 
 # --- validate_extension_matches_type ----------------------------------------
@@ -162,3 +195,39 @@ async def test_successful_upload_increments_uploads_metric(client, monkeypatch):
 
     metrics_resp = await client.get("/metrics")
     assert "uploads_total 1" in metrics_resp.text
+
+
+# --- scene threads through to the stored key --------------------------------
+
+
+@pytest.mark.parametrize(
+    ("scene", "expected_key"),
+    [
+        ("", "uploads/a.png"),  # default: flat prefix
+        ("living-room", "uploads/living-room/a.png"),  # per-scene sub-prefix
+    ],
+)
+def test_process_upload_uses_scene_prefix(monkeypatch, scene, expected_key):
+    captured: dict = {}
+
+    def _fake_upload(file_data, key, content_type):
+        captured["key"] = key
+        return FileUploadResponse(
+            key=key,
+            filename="a.png",
+            size_bytes=len(file_data),
+            size_human="16 B",
+            content_type=content_type,
+            uploaded_at="2026-02-14T00:00:00Z",
+            url=None,
+            metadata=None,
+        )
+
+    monkeypatch.setattr(upload_service, "upload_file", _fake_upload)
+    monkeypatch.setattr(
+        upload_service, "extract_metadata", lambda file_data, filename, content_type: None
+    )
+
+    result = process_upload(_PNG, "a.png", "image/png", scene=scene)
+    assert captured["key"] == expected_key
+    assert result.key == expected_key

@@ -40,17 +40,30 @@ writing co-located depth artifacts + a `manifest.jsonl` index back to B2.
 | Read | `/jobs` + `/jobs/[id]` | Table + detail (status, stats, pairs grid) |
 | Edit (rename) | `/jobs/[id]` dialog | Rewrites the job's display name in B2 |
 | Delete | `/jobs/[id]` confirm dialog | Deletes artifacts + manifest + record, prefix-scoped |
-| Run | `/jobs/[id]` button | Runs Depth Anything V2 synchronously, capped at `DEPTH_MAX_IMAGES_PER_RUN` |
+| Run | `/jobs/[id]` button | Runs Depth Anything V2 **asynchronously** (background worker thread), capped at `DEPTH_MAX_IMAGES_PER_RUN` |
 
-## Flow (run)
-- List source images under `source_prefix` (excludes the app's own output prefixes)
-- Cap to `DEPTH_MAX_IMAGES_PER_RUN`; mark job `running`
-- For each image: get bytes → estimate depth → encode artifacts → `put_object`
-- Write `manifest.jsonl`; flip status to `completed` (or `failed`, recording the error)
+## Flow (run — asynchronous)
+- `POST /jobs/{id}/run` (`service.start_job_run`) validates, lists source images
+  under `source_prefix` (excludes the app's own output prefixes), records
+  `matched_count` (honest total in the prefix) and `image_count` (capped to
+  `DEPTH_MAX_IMAGES_PER_RUN`), flips status to `running`, and **returns immediately**.
+- A background worker thread (`service._execute_run`) then, for each image: get
+  bytes → estimate depth → encode artifacts → `put_object`, **saving the job after
+  each image** so `processed_count` advances.
+- Writes `manifest.jsonl`; flips status to `completed` (or `failed`, recording the error).
+- The UI polls `GET /jobs/{id}` (`useJob` `refetchInterval` while `running`) and renders
+  a spinner, a `Running` status badge, and a **determinate** progress bar
+  (`processed_count / image_count`); polling stops on a terminal state.
+- **Capped runs are surfaced**: when `matched_count > image_count` the detail page
+  shows a "Run capped" notice ("processes N of M images … capped at
+  `DEPTH_MAX_IMAGES_PER_RUN`"), so a partial run is never read as a full-prefix run.
 
 ## Edge Cases
 - No source images under the prefix → `409` "No source images found"
 - Running a `completed` job → `409` "Job already completed"
+- Running a job already `running` → `409` "Job is already running"
+- Prefix holds more images than the cap → `matched_count` > `image_count`; only
+  `image_count` processed; UI shows the capped notice
 - Missing job id → `404`
 - A per-image failure mid-run → status `failed`, error surfaced inline; already-processed
   images are still written to the manifest
@@ -59,11 +72,15 @@ writing co-located depth artifacts + a `manifest.jsonl` index back to B2.
 ## UX States
 - List: loading skeleton / empty / table
 - Detail: loading / error / configuration + stats + pairs grid (empty until a run)
+- Detail (running): spinner + `Running` badge + determinate progress bar, live-polled
+- Detail (capped): "Run capped" notice (matched vs processed) above the stats
 
 ## Verification
 - Test files: `services/api/tests/test_jobs.py`
 - Required cases: create resolves model id, get-missing raises, rename, delete,
-  run-no-sources raises, run writes artifacts + manifest + pairs, dataset-stats amplification
+  run-no-sources raises, run writes artifacts + manifest + pairs, dataset-stats
+  amplification, run caps + reports `matched_count`, `start_job_run` returns
+  `running` then completes, running an already-`running` job raises
 - Quick verify command: `pnpm test:api`
 - Full verify command: `pnpm lint && pnpm lint:api && pnpm test:api && pnpm check:structure`
 - Pass criteria: all pytest tests green, no ruff violations

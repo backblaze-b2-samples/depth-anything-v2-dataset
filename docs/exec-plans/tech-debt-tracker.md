@@ -45,3 +45,13 @@ Known tech debt items. Agents update this when they discover or create tech debt
 | Custom `FileNotFoundError` shadowed the built-in | Renamed to `FileNotFoundServiceError` |
 | Dropzone accepted any file type client-side | `accept` allow-list mirroring backend `ALLOWED_TYPES` (tested for drift) |
 | No test harness for feature specs | pytest suite across upload, files, activity, errors, validation, rate limit, pagination |
+
+## 2026-07-21 — verify
+
+Nitpicks surfaced by the sample-3-verify UX funnel (blockers/frictions were fixed in the same run; these are low-priority polish, not loop items):
+
+- Pairs Library — dev console logs repeated "Encountered two children with the same key" (Next dev overlay flags 8–28 issues) → `PairsGrid` keys cards by source image key, so a source processed by more than one job produces duplicate React keys (latent duplicate/omit risk; all pairs currently paint). Dedupe or compose the key with `job_id`. (.local/verify/C2b/08-library.png)
+- Depth Job detail (mid-run) — "Dataset stats → Depth maps stored" increments to 1 while the "Image → depth pairs" panel still reads "No pairs yet / Run the job to generate depth maps" → the manifest is only written in `_execute_run`'s `finally` block, so `GET /jobs/{id}/pairs` stays empty until completion even though the grid polls; mild internal inconsistency during the run. Write partial manifest rows incrementally, or hide the empty-state while status is running. (.local/verify/B2/06c-jobA-progress-advancing.png)
+- Create-job flow — after "Create job" the user lands on the Depth Jobs table with the job Pending and must open it + click a separate Run; no "Create & run" action or auto-navigation to the new job's detail (gate: OVER-CLAIMED, demoted from friction). Consider auto-navigating to the created job or offering "Create & run". (.local/verify/A2/a2-05-jobs-table-created.png)
+- Create-job dialog — the Source-prefix dropdown lists only top-level prefixes (`uploads/`, `images/`, …), not nested scene sub-prefixes like `uploads/<scene>/`; a manual create into a scene must use "Custom prefix…" (mitigated on the default path by the `/upload` "Create a Depth Job from these images" CTA, which prefills the exact scene prefix) (gate: OVER-CLAIMED, demoted from friction). Consider listing one level of sub-prefixes. (.local/verify/C2/12-source-prefix-dropdown.png)
+- Depth Jobs empty state — the "No depth jobs yet" card describes the next action but embeds no CTA button (the only CTA is the top-right "New job"); the Dashboard/Library empty states do embed one. (.local/verify/A/04-jobs-empty.png)
