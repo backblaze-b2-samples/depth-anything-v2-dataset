@@ -20,6 +20,28 @@ accessed over the S3-compatible API with a custom user-agent and standard `B2_*`
 env vars. Everything heavy runs **locally** — no second API key, just B2
 credentials.
 
+## What it looks like
+
+**Dashboard** — depth-dataset metrics, a source-vs-depth storage chart that tells the write-amplification story, and the most recent jobs.
+
+![Dashboard with depth-dataset metrics and a source-vs-depth storage chart](docs/images/dashboard.png)
+
+**Upload** — drag-and-drop ingest of source RGB images into a B2 scene prefix, ready for a Depth Job.
+
+![Ingest source RGB images into a B2 scene prefix](docs/images/upload.png)
+
+**Depth Jobs** — the primary entity: each Depth Anything V2 run over a scene prefix, with its model, image count, and status.
+
+![Depth Jobs list of completed runs over scene prefixes](docs/images/depth-jobs.png)
+
+**Job detail** — a completed job's configuration, dataset stats with the amplification ratio, and the source→depth pairs it produced.
+
+![Job detail with configuration, dataset stats, and source-to-depth pairs](docs/images/job-detail.png)
+
+**Pairs Library** — the training-ready gallery of every source→depth pair across all jobs, served from B2 via presigned URLs.
+
+![Pairs Library gallery of source-to-depth pairs across all jobs](docs/images/pairs-library.png)
+
 ## The workflow
 
 1. **Ingest** source RGB images into a B2 scene prefix (`/upload`, or run
