@@ -11,7 +11,7 @@ Pillow>=11.0.0
 # runtime). Pinned windows: unbounded torch/transformers is a false-green on a
 # fresh clone (boots + hermetic tests pass, real inference errors).
 torch>=2.3,<2.9
-transformers>=4.45,<5
+transformers>=5.10,<6
 numpy>=1.26,<2
 
 # Dev / quality
